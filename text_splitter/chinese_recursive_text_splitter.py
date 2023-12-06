@@ -100,5 +100,6 @@ if __name__ == "__main__":
     for inum, text in enumerate(ls):
         print(inum)
         chunks = text_splitter.split_text(text)
-        for chunk in chunks:
-            print(chunk)
+        print(chunks)
+        # for chunk in chunks:
+            # print(chunk)

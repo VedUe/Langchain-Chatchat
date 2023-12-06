@@ -105,8 +105,8 @@ def dialogue_page(api: ApiRequest, is_lite: bool = False):
 
     if not chat_box.chat_inited:
         st.toast(
-            f"欢迎使用 [`Langchain-Chatchat`](https://github.com/chatchat-space/Langchain-Chatchat) ! \n\n"
-            f"当前运行的模型`{default_model}`, 您可以开始提问了."
+            f"欢迎使用珠宝知识问答机器人! \n\n"
+            f"您可以开始提问了."
         )
         chat_box.init_session()
 
@@ -137,8 +137,8 @@ def dialogue_page(api: ApiRequest, is_lite: bool = False):
                     text = f"{text} 当前知识库： `{cur_kb}`。"
             st.toast(text)
 
-        dialogue_modes = ["LLM 对话",
-                        "知识库问答",
+        dialogue_modes = ["知识库问答",
+                        "LLM 对话",
                         "文件对话",
                         "搜索引擎问答",
                         "自定义Agent问答",
