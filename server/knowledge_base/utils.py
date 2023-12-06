@@ -20,6 +20,7 @@ from server.utils import run_in_thread_pool, get_model_worker_config
 import json
 from typing import List, Union,Dict, Tuple, Generator
 import chardet
+from langchain.document_loaders import TextLoader
 
 
 def validate_kb_name(knowledge_base_id: str) -> bool:
@@ -147,10 +148,15 @@ def get_loader(loader_name: str, file_path: str, loader_kwargs: Dict = None):
     loader_kwargs = loader_kwargs or {}
     try:
         if loader_name in ["RapidOCRPDFLoader", "RapidOCRLoader","FilteredCSVLoader"]:
+            print(1.1)
             document_loaders_module = importlib.import_module('document_loaders')
         else:
-            document_loaders_module = importlib.import_module('langchain.document_loaders')
-        DocumentLoader = getattr(document_loaders_module, loader_name)
+            print(1.2)
+            # document_loaders_module = importlib.import_module('langchain.document_loaders')
+            document_loader = TextLoader
+            # document_loaders_module = None
+        if document_loaders_module is not None:
+            DocumentLoader = getattr(document_loaders_module, loader_name)
     except Exception as e:
         msg = f"为文件{file_path}查找加载器{loader_name}时出错：{e}"
         logger.error(f'{e.__class__.__name__}: {msg}',
@@ -159,8 +165,10 @@ def get_loader(loader_name: str, file_path: str, loader_kwargs: Dict = None):
         DocumentLoader = getattr(document_loaders_module, "UnstructuredFileLoader")
 
     if loader_name == "UnstructuredFileLoader":
+        print(2.1)
         loader_kwargs.setdefault("autodetect_encoding", True)
     elif loader_name == "CSVLoader":
+        print(2.2)
         if not loader_kwargs.get("encoding"):
             # 如果未指定 encoding，自动识别文件编码类型，避免langchain loader 加载文件报编码错误
             with open(file_path, 'rb') as struct_file:
@@ -171,13 +179,18 @@ def get_loader(loader_name: str, file_path: str, loader_kwargs: Dict = None):
         ## TODO：支持更多的自定义CSV读取逻辑
 
     elif loader_name == "JSONLoader":
+        print(2.3)
         loader_kwargs.setdefault("jq_schema", ".")
         loader_kwargs.setdefault("text_content", False)
     elif loader_name == "JSONLinesLoader":
+        print(2.4)
         loader_kwargs.setdefault("jq_schema", ".")
         loader_kwargs.setdefault("text_content", False)
 
-    loader = DocumentLoader(file_path, **loader_kwargs)
+    if document_loader is not None:
+        loader = document_loader(file_path)
+    else:
+        loader = DocumentLoader(file_path, **loader_kwargs)
     return loader
 
 
