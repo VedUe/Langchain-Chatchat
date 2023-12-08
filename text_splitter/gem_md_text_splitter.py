@@ -42,7 +42,7 @@ class GemTextSplitter(CharacterTextSplitter):
                 sent_tmp = ''             
         # h3 = ''
         # h4 = ''
-        # for sent in sent_list1:veduetodo    
+        # for sent in sent_list1:veduetodo
         return sent_list1
     
 if __name__ == "__main__":
