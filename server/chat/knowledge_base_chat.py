@@ -48,6 +48,7 @@ async def knowledge_base_chat(query: str = Body(..., description="用户输入",
                               ),
                               request: Request = None,
                               ):
+    # 加载知识库
     kb = KBServiceFactory.get_service_by_name(knowledge_base_name)
     if kb is None:
         return BaseResponse(code=404, msg=f"未找到知识库 {knowledge_base_name}")
@@ -73,10 +74,10 @@ async def knowledge_base_chat(query: str = Body(..., description="用户输入",
             callbacks=[callback],
         )
         docs = search_docs(query, knowledge_base_name, top_k, score_threshold) # 知识库搜索到的文档
-        '''todo
-        在向量库中只存储检索用的标题、关键词，再一个映射表或数据库存储标题对应的内容
         '''
-        # context应该是通过数据库检索得到的内容
+        todo
+        
+        '''
         context = "\n".join([doc.page_content for doc in docs])
         if len(docs) == 0:  # 如果没有找到相关文档，使用empty模板
             prompt_template = get_prompt_template("knowledge_base_chat", "empty")
