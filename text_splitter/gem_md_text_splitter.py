@@ -107,10 +107,10 @@ class GemTextSplitter(CharacterTextSplitter):
         # 去重复行
         sent_list2 = []
         for sent in sent_list1:
-            lst = sent.split('\n\n')
+            lst = sent.split('\n')
             new_lst = []
-            [new_lst.append(i) for i in lst if not new_lst.count(i) and i != '\n']
-            sent_list2.append("\n".join(new_lst))
+            [new_lst.append(i) for i in lst if i not in new_lst and i != '\n' and i != '']
+            sent_list2.append("\n\n".join(new_lst))
         return sent_list2
     
 if __name__ == "__main__":
