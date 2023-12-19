@@ -73,13 +73,8 @@ async def knowledge_base_chat(query: str = Body(..., description="用户输入",
             callbacks=[callback],
         )
         docs = search_docs(query, knowledge_base_name, top_k, score_threshold) # 知识库搜索到的文档
-        '''
-        todo
-        
-        '''
         heads = [doc.page_content for doc in docs]
-        print(heads)
-        conn = pymysql.connect(host='172.17.0.3', user='dockers_admin', password='gicdockers_admin', db='gemology', charset='utf8')
+        conn = pymysql.connect(host='172.17.0.3', user='selector', password='gicselector', db='gemology', charset='utf8')
         cursor = conn.cursor()
         contents = []
         for head in heads:
@@ -91,7 +86,6 @@ async def knowledge_base_chat(query: str = Body(..., description="用户输入",
             for idx in idxs:
                 cursor.execute(sql, {'idx': idx})        
                 content = cursor.fetchone()[0]
-                print('===')
                 contents.append(content)
         context = "\n".join(contents)
         if len(docs) == 0:  # 如果没有找到相关文档，使用empty模板
