@@ -7,7 +7,7 @@
 保存的模型的位置位于原本嵌入模型的目录下，模型的名称为原模型名称+Merge_Keywords_时间戳
 '''
 import sys
-sys.path.append("..")
+sys.path.append("/code/Langchain-Chatchat")
 from datetime import datetime
 from configs import (
     MODEL_PATH,
