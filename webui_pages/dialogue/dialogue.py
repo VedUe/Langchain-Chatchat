@@ -110,7 +110,7 @@ def dialogue_page(api: ApiRequest, is_lite: bool = False):
             f"首次提问需要加载知识库，请耐心等待哦❀❀"
         )
         chat_box.init_session()
-
+    
     # 弹出自定义命令帮助信息
     modal = Modal("自定义命令", key="cmd_help", max_width="500")
     if modal.is_open():
@@ -296,6 +296,7 @@ def dialogue_page(api: ApiRequest, is_lite: bool = False):
         "optional_text_label": "欢迎反馈您打分的理由",
     }
 
+
     if prompt := st.chat_input(chat_input_placeholder, key="prompt"):
         if parse_command(text=prompt, modal=modal): # 用户输入自定义命令
             st.rerun()
@@ -417,7 +418,6 @@ def dialogue_page(api: ApiRequest, is_lite: bool = False):
                     f"正在执行 `{search_engine}` 搜索...",
                     Markdown("...", in_expander=True, title="网络搜索结果", state="complete"),
                 ])
-                text = ""
                 for d in api.search_engine_chat(prompt,
                                                 search_engine_name=search_engine,
                                                 top_k=se_top_k,

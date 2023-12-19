@@ -61,9 +61,7 @@ class FaissKBService(KBService):
                   ) -> List[Document]:
         embed_func = EmbeddingsFunAdapter(self.embed_model)
         embeddings = embed_func.embed_query(query)
-        print('=======/code/Langchain-Chatchat/server/knowledge_base/kb_service/faiss_kb_service.py')
         with self.load_vector_store().acquire() as vs:
-            print(type(vs))
             docs = vs.similarity_search_with_score_by_vector(embeddings, k=top_k, score_threshold=score_threshold)
         return docs
 

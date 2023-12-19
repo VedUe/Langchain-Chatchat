@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 from urllib.parse import urlencode
 from server.knowledge_base.kb_doc_api import search_docs
-
+import pymysql
 
 async def knowledge_base_chat(query: str = Body(..., description="用户输入", examples=["你好"]),
                               knowledge_base_name: str = Body(..., description="知识库名称", examples=["samples"]),
@@ -46,10 +46,9 @@ async def knowledge_base_chat(query: str = Body(..., description="用户输入",
                                   "default",
                                   description="使用的prompt模板名称(在configs/prompt_config.py中配置)"
                               ),
-                              request: Request = None,
+                              request: Request = None
                               ):
-    # 加载知识库
-    kb = KBServiceFactory.get_service_by_name(knowledge_base_name)
+    kb = KBServiceFactory.get_service_by_name('gems')
     if kb is None:
         return BaseResponse(code=404, msg=f"未找到知识库 {knowledge_base_name}")
 
@@ -78,7 +77,23 @@ async def knowledge_base_chat(query: str = Body(..., description="用户输入",
         todo
         
         '''
-        context = "\n".join([doc.page_content for doc in docs])
+        heads = [doc.page_content for doc in docs]
+        print(heads)
+        conn = pymysql.connect(host='172.17.0.3', user='dockers_admin', password='gicdockers_admin', db='gemology', charset='utf8')
+        cursor = conn.cursor()
+        contents = []
+        for head in heads:
+            sql = f'select idx from idx2head where head=%(head)s'
+            cursor.execute(sql, {'head': head})
+            results = cursor.fetchall()
+            idxs = [results[i][0] for i in range(len(results))]
+            sql = f'select content from idx2content where idx=%(idx)s'
+            for idx in idxs:
+                cursor.execute(sql, {'idx': idx})        
+                content = cursor.fetchone()[0]
+                print('===')
+                contents.append(content)
+        context = "\n".join(contents)
         if len(docs) == 0:  # 如果没有找到相关文档，使用empty模板
             prompt_template = get_prompt_template("knowledge_base_chat", "empty")
         else:
