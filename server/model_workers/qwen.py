@@ -1,3 +1,4 @@
+import dashscope
 import json
 import sys
 
@@ -30,7 +31,6 @@ class QwenWorker(ApiModelWorker):
         self.version = version
 
     def do_chat(self, params: ApiChatParams) -> Dict:
-        import dashscope
         params.load_config(self.model_names[0])
         if log_verbose:
             logger.info(f'{self.__class__.__name__}:params: {params}')

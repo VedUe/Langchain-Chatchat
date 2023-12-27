@@ -12,6 +12,7 @@ from server.knowledge_base.utils import LOADER_DICT
 import uuid
 from typing import List, Dict
 
+runse = True
 
 chat_box = ChatBox(
     assistant_avatar=os.path.join(
@@ -369,26 +370,79 @@ def dialogue_page(api: ApiRequest, is_lite: bool = False):
                 chat_box.update_msg(ans, element_index=0, streaming=False)
                 chat_box.update_msg(text, element_index=1, streaming=False)
             elif dialogue_mode == "知识库问答":
-                chat_box.ai_say([
-                    f"正在查询知识库 `{selected_kb}` ...",
-                    Markdown("...", in_expander=True, title="知识库匹配结果", state="complete"),
-                ])
-                text = ""
-                for d in api.knowledge_base_chat(prompt,
-                                                knowledge_base_name=selected_kb,
-                                                top_k=kb_top_k,
-                                                score_threshold=score_threshold,
-                                                history=history,
-                                                model=llm_model,
-                                                prompt_name=prompt_template_name,
-                                                temperature=temperature):
-                    if error_msg := check_error_msg(d):  # check whether error occured
-                        st.error(error_msg)
-                    elif chunk := d.get("answer"):
-                        text += chunk
+                if runse == False:
+                    chat_box.ai_say([
+                        f"正在查询知识库 `{selected_kb}` ...",
+                        Markdown("...", in_expander=True, title="知识库匹配结果", state="complete"),
+                    ])
+                    text = ""
+                    for d in api.knowledge_base_chat(prompt,
+                                                    knowledge_base_name=selected_kb,
+                                                    top_k=kb_top_k,
+                                                    score_threshold=score_threshold,
+                                                    history=history,
+                                                    model=llm_model,
+                                                    prompt_name=prompt_template_name,
+                                                    temperature=temperature):
+                        if error_msg := check_error_msg(d):  # check whether error occured
+                            st.error(error_msg)
+                        elif chunk := d.get("answer"):
+                            text += chunk
+                            chat_box.update_msg(text, element_index=0)
+                    chat_box.update_msg(text, element_index=0, streaming=False)
+                    chat_box.update_msg("\n\n".join(d.get("docs", [])), element_index=1, streaming=False)
+                else:
+                    # 润色模块
+                    chat_box.ai_say([
+                        f"正在查询知识库 `{selected_kb}` ...",
+                        Markdown("...", in_expander=True, title="知识库匹配结果", state="complete"),
+                    ])
+                    text = ""
+                    for d in api.knowledge_base_chat(prompt,
+                                                    knowledge_base_name=selected_kb,
+                                                    top_k=kb_top_k,
+                                                    score_threshold=score_threshold,
+                                                    history=history,
+                                                    model=llm_model,
+                                                    prompt_name=prompt_template_name,
+                                                    temperature=temperature):
+                        if error_msg := check_error_msg(d):  # check whether error occured
+                            st.error(error_msg)
+                        elif chunk := d.get("answer"):
+                            text += chunk
+                            chat_box.update_msg(text, element_index=0)
+                        chat_box.update_msg(text, element_index=0, streaming=False)
+                    chat_box.update_msg("\n\n".join(d.get("docs", [])), element_index=1, streaming=False)
+                    text0 = text
+                    chat_box.update_msg("正在润色语言 ...", element_index=0)
+                    text = ""
+                    prompt2 = f"```{text0}```\n\n请你用亲切诙谐的语气有条理地转述这段话，直接输出转述后的结果。"
+                    # prompt2 = f"```{text0}```\n\n请你用亲切诙谐的语气转述这段话"
+                    # prompt2 = f"```{text0}```\n\n请你用亲切诙谐的语气转述这段话"
+                    message_id = ""
+                    r = api.chat_chat(prompt2,
+                                    history=[],
+                                    conversation_id=conversation_id,
+                                    model=llm_model,
+                                    prompt_name=prompt_template_name,
+                                    temperature=temperature)
+                    for t in r:
+                        if error_msg := check_error_msg(t):  # check whether error occured
+                            st.error(error_msg)
+                            break
+                        text += t.get("text", "")
                         chat_box.update_msg(text, element_index=0)
-                chat_box.update_msg(text, element_index=0, streaming=False)
-                chat_box.update_msg("\n\n".join(d.get("docs", [])), element_index=1, streaming=False)
+                        message_id = t.get("message_id", "")
+
+                    metadata = {
+                        "message_id": message_id,
+                        }
+                    chat_box.update_msg(text, streaming=False, element_index=0)  # 更新最终的字符串，去除光标
+                    chat_box.show_feedback(**feedback_kwargs,
+                                        key=message_id,
+                                        on_submit=on_feedback,
+                                        kwargs={"message_id": message_id, "history_index": len(chat_box.history) - 1})
+                
             elif dialogue_mode == "文件对话":
                 if st.session_state["file_chat_id"] is None:
                     st.error("请先上传文件再进行对话")

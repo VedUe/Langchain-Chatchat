@@ -1,6 +1,6 @@
 from fastapi import Body, Request
 from fastapi.responses import StreamingResponse
-from configs import (LLM_MODELS, VECTOR_SEARCH_TOP_K, SCORE_THRESHOLD, TEMPERATURE)
+from configs import (LLM_MODELS, VECTOR_SEARCH_TOP_K, SCORE_THRESHOLD, TEMPERATURE, MYSQL_HOST)
 from server.utils import wrap_done, get_ChatOpenAI
 from server.utils import BaseResponse, get_prompt_template
 from langchain.chains import LLMChain
@@ -66,6 +66,7 @@ async def knowledge_base_chat(query: str = Body(..., description="用户输入",
         if isinstance(max_tokens, int) and max_tokens <= 0:
             max_tokens = None
 
+        # 获取模型
         model = get_ChatOpenAI(
             model_name=model_name,
             temperature=temperature,
@@ -74,7 +75,7 @@ async def knowledge_base_chat(query: str = Body(..., description="用户输入",
         )
         docs = search_docs(query, knowledge_base_name, top_k, score_threshold) # 知识库搜索到的文档
         heads = [doc.page_content for doc in docs]
-        conn = pymysql.connect(host='172.17.0.3', user='selector', password='gicselector', db='gemology', charset='utf8')
+        conn = pymysql.connect(host=MYSQL_HOST, user='selector', password='gicselector', db='gemology', charset='utf8')
         cursor = conn.cursor()
         contents = []
         for head in heads:
@@ -106,11 +107,11 @@ async def knowledge_base_chat(query: str = Body(..., description="用户输入",
 
         source_documents = []
         for inum, doc in enumerate(docs):
-            filename = doc.metadata.get("source")
-            parameters = urlencode({"knowledge_base_name": knowledge_base_name, "file_name": filename})
-            base_url = request.base_url
-            url = f"{base_url}knowledge_base/download_doc?" + parameters
-            text = f"""出处 [{inum + 1}] [{filename}]({url}) \n\n{doc.page_content}\n\n"""
+            # filename = doc.metadata.get("source")
+            # parameters = urlencode({"knowledge_base_name": knowledge_base_name, "file_name": filename})
+            # base_url = request.base_url
+            # url = f"{base_url}knowledge_base/download_doc?" + parameters
+            text = f"""{doc.page_content}\n\n"""
             source_documents.append(text)
 
         if len(source_documents) == 0:  # 没有找到相关文档

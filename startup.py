@@ -6,7 +6,9 @@ import sys
 from multiprocessing import Process
 from datetime import datetime
 from pprint import pprint
-
+import requests
+import json
+import threading
 
 # 设置numexpr最大线程数，默认为CPU核心数
 try:
@@ -40,6 +42,26 @@ import argparse
 from typing import Tuple, List, Dict
 from configs import VERSION
 
+def  advance_load_vs():
+        # 提前向知识库查询api发送一次请求，减少第一次聊天的等待时间
+        data = {
+            "query": "红宝石的折射率",
+            "knowledge_base_name": "gems",
+            "top_k": 8,
+            "score_threshold": 0.9,
+            "history": [],
+            "stream": False,
+            "model_name": "baichuan-13b-chat-int4",
+            "temperature": 0.2,
+            "max_tokens": 0,
+            "prompt_name": "default"
+            }
+        headers = {
+            "Content-Type": "application/json"
+        }
+        url = 'http://127.0.0.1:7861/chat/knowledge_base_chat'
+        response = requests.post(url, data=json.dumps(data), headers=headers)
+        return
 
 def create_controller_app(
         dispatch_method: str,
@@ -171,9 +193,8 @@ def create_model_worker_app(log_level: str = "INFO", **kwargs) -> FastAPI:
             from fastchat.serve.model_worker import app, GptqConfig, AWQConfig, ModelWorker, worker_id
 
             args.gpus = "0" # GPU的编号,如果有多个GPU，可以设置为"0,1,2,3"
-            args.max_gpu_memory = "22GiB"
+            args.max_gpu_memory = "24GiB"
             args.num_gpus = 1  # model worker的切分是model并行，这里填写显卡的数量
-
             args.load_8bit = False
             args.cpu_offloading = None
             args.gptq_ckpt = None
@@ -324,7 +345,7 @@ def run_controller(log_level: str = "INFO", started_event: mp.Event = None):
 
         with get_httpx_client() as client:
             r = client.post(worker_address + "/release",
-                        json={"new_model_name": new_model_name, "keep_origin": keep_origin})
+            json={"new_model_name": new_model_name, "keep_origin": keep_origin})
             if r.status_code != 200:
                 msg = f"failed to release model: {model_name}"
                 logger.error(msg)
@@ -360,7 +381,7 @@ def run_controller(log_level: str = "INFO", started_event: mp.Event = None):
 
     uvicorn.run(app, host=host, port=port, log_level=log_level.lower())
 
-
+# 加载模型
 def run_model_worker(
         model_name: str = LLM_MODELS[0],
         controller_address: str = "",
@@ -594,7 +615,6 @@ def dump_server_info(after_start=False, args=None):
     print("=" * 30 + "Langchain-Chatchat Configuration" + "=" * 30)
     print("\n")
 
-
 async def start_main_server():
     import time
     import signal
@@ -645,7 +665,7 @@ async def start_main_server():
         run_mode = "lite"
 
     dump_server_info(args=args)
-
+    
     if len(sys.argv) > 1:
         logger.info(f"正在启动服务：")
         logger.info(f"如需查看 llm_api 日志，请前往 {LOG_PATH}")
@@ -766,14 +786,21 @@ async def start_main_server():
                 p.start()
                 p.name = f"{p.name} ({p.pid})"
                 api_started.wait() # 等待api.py启动完成
-
+            
+            # 提前发送一个请求来激活向量库
+            class MyThread(threading.Thread):
+                def run(self):
+                    advance_load_vs()
+            my_thread = MyThread()
+            my_thread.start()
+            
             if p:= processes.get("webui"):
                 p.start()
                 p.name = f"{p.name} ({p.pid})"
                 webui_started.wait() # 等待webui.py启动完成
 
             dump_server_info(after_start=True, args=args)
-
+                        
             while True:
                 cmd = queue.get() # 收到切换模型的消息
                 e = manager.Event()
