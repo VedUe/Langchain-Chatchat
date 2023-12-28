@@ -15,7 +15,9 @@ import json
 from pathlib import Path
 from urllib.parse import urlencode
 from server.knowledge_base.kb_doc_api import search_docs
-import pymysql
+import sys
+sys.path.append('/code/Langchain-Chatchat/mysql')
+from mysql.mysql_db import pool
 
 async def knowledge_base_chat(query: str = Body(..., description="用户输入", examples=["你好"]),
                               knowledge_base_name: str = Body(..., description="知识库名称", examples=["samples"]),
@@ -73,23 +75,31 @@ async def knowledge_base_chat(query: str = Body(..., description="用户输入",
             max_tokens=max_tokens,
             callbacks=[callback],
         )
-        docs = search_docs(query, knowledge_base_name, top_k, score_threshold) # 知识库搜索到的文档
+        # 知识库搜索相似的标题
+        docs = search_docs(query, knowledge_base_name, top_k, score_threshold) 
         heads = [doc.page_content for doc in docs]
-        conn = pymysql.connect(host=MYSQL_HOST, user='selector', password='gicselector', db='gemology', charset='utf8')
-        cursor = conn.cursor()
         contents = []
-        for head in heads:
-            sql = f'select idx from idx2head where head=%(head)s'
-            cursor.execute(sql, {'head': head})
-            results = cursor.fetchall()
-            idxs = [results[i][0] for i in range(len(results))]
-            sql = f'select content from idx2content where idx=%(idx)s'
-            for idx in idxs:
-                cursor.execute(sql, {'idx': idx})        
-                content = cursor.fetchone()[0]
-                contents.append(content)
+        
+        # 查询数据库找到标题对应内容
+        conn = pool.get_connection()
+        try:
+            mysql_cursor = conn.cursor()
+            for head in heads:
+                sql = f'select idx from idx2head where head=%(head)s'
+                mysql_cursor.execute(sql, {'head': head})
+                results = mysql_cursor.fetchall()
+                idxs = [results[i][0] for i in range(len(results))]
+                sql = f'select content from idx2content where idx=%(idx)s'
+                for idx in idxs:
+                    mysql_cursor.execute(sql, {'idx': idx})        
+                    content = mysql_cursor.fetchone()[0]
+                    contents.append(content)
+        finally:
+            pool.release_connection(conn)
         context = "\n".join(contents)
-        if len(docs) == 0:  # 如果没有找到相关文档，使用empty模板
+        
+        # 如果没有找到相关标题，使用empty模板
+        if len(docs) == 0:
             prompt_template = get_prompt_template("knowledge_base_chat", "empty")
         else:
             prompt_template = get_prompt_template("knowledge_base_chat", prompt_name)
@@ -111,12 +121,13 @@ async def knowledge_base_chat(query: str = Body(..., description="用户输入",
             # parameters = urlencode({"knowledge_base_name": knowledge_base_name, "file_name": filename})
             # base_url = request.base_url
             # url = f"{base_url}knowledge_base/download_doc?" + parameters
-            text = f"""{doc.page_content}\n\n"""
+            text = f"""[{inum}] {doc.page_content}\n\n"""
             source_documents.append(text)
 
         if len(source_documents) == 0:  # 没有找到相关文档
             source_documents.append(f"<span style='color:red'>未找到相关文档,该回答为大模型自身能力解答！</span>")
-
+            
+        final_answer = ''
         if stream:
             async for token in callback.aiter():
                 # Use server-sent-events to stream the response
@@ -126,11 +137,12 @@ async def knowledge_base_chat(query: str = Body(..., description="用户输入",
             answer = ""
             async for token in callback.aiter():
                 answer += token
+                final_answer = answer
             yield json.dumps({"answer": answer,
                               "docs": source_documents},
                              ensure_ascii=False)
         await task
-
+        
     return StreamingResponse(knowledge_base_chat_iterator(query=query,
                                                           top_k=top_k,
                                                           history=history,

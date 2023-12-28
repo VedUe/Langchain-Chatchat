@@ -42,9 +42,7 @@ def get_ChatOpenAI(
 ) -> ChatOpenAI:
     config = get_model_worker_config(model_name)
     if model_name == "openai-api":
-        print(f'model_name:{model_name}')
         model_name = config.get("model_name")
-    print(f'model_name:{model_name}')
     model = ChatOpenAI(
         streaming=streaming,
         verbose=verbose,
@@ -57,7 +55,6 @@ def get_ChatOpenAI(
         openai_proxy=config.get("openai_proxy"),
         **kwargs
     )
-    print(type(model))
     return model
 
 def get_OpenAI(

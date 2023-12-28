@@ -9,6 +9,7 @@ from pprint import pprint
 import requests
 import json
 import threading
+from mysql.mysql_db import pool
 
 # 设置numexpr最大线程数，默认为CPU核心数
 try:
@@ -45,7 +46,7 @@ from configs import VERSION
 def  advance_load_vs():
         # 提前向知识库查询api发送一次请求，减少第一次聊天的等待时间
         data = {
-            "query": "红宝石的折射率",
+            "query": "你好",
             "knowledge_base_name": "gems",
             "top_k": 8,
             "score_threshold": 0.9,
@@ -787,13 +788,6 @@ async def start_main_server():
                 p.name = f"{p.name} ({p.pid})"
                 api_started.wait() # 等待api.py启动完成
             
-            # 提前发送一个请求来激活向量库
-            class MyThread(threading.Thread):
-                def run(self):
-                    advance_load_vs()
-            my_thread = MyThread()
-            my_thread.start()
-            
             if p:= processes.get("webui"):
                 p.start()
                 p.name = f"{p.name} ({p.pid})"
@@ -801,6 +795,13 @@ async def start_main_server():
 
             dump_server_info(after_start=True, args=args)
                         
+            # 提前发送一个请求来激活向量库
+            class MyThread(threading.Thread):
+                def run(self):
+                    advance_load_vs()
+            my_thread = MyThread()
+            my_thread.start()
+            
             while True:
                 cmd = queue.get() # 收到切换模型的消息
                 e = manager.Event()
@@ -905,6 +906,9 @@ if __name__ == "__main__":
         asyncio.set_event_loop(loop)
     # 同步调用协程代码
     loop.run_until_complete(start_main_server())
+    
+    # 在应用程序结束时关闭所有mysql连接
+    pool.close_all()
 
 
 # 服务启动后接口调用示例：

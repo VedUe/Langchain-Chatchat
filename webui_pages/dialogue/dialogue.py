@@ -11,6 +11,7 @@ from configs import (TEMPERATURE, HISTORY_LEN, PROMPT_TEMPLATES,
 from server.knowledge_base.utils import LOADER_DICT
 import uuid
 from typing import List, Dict
+from datetime import datetime
 
 runse = True
 
@@ -412,6 +413,12 @@ def dialogue_page(api: ApiRequest, is_lite: bool = False):
                             text += chunk
                             chat_box.update_msg(text, element_index=0)
                         chat_box.update_msg(text, element_index=0, streaming=False)
+                    # 将每一次的问答存储起来
+                    j = {"Q": prompt, "A": text}
+                    date = datetime.now().date()
+                    with open(f'knowledge_base_to_be/QA_{date}', 'a', encoding='utf-8') as fw:
+                        fw.writelines(str(j) + '\n')
+                        
                     chat_box.update_msg("\n\n".join(d.get("docs", [])), element_index=1, streaming=False)
                     text0 = text
                     chat_box.update_msg("正在润色语言 ...", element_index=0)
