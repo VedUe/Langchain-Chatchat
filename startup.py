@@ -1,3 +1,25 @@
+from configs import VERSION
+from typing import Tuple, List, Dict
+import argparse
+from server.utils import (fschat_controller_address, fschat_model_worker_address,
+                          fschat_openai_api_address, set_httpx_config, get_httpx_client,
+                          get_model_worker_config, get_all_model_worker_configs,
+                          MakeFastAPIOffline, FastAPI, llm_device, embedding_device)
+from configs import (
+    LOG_PATH,
+    log_verbose,
+    logger,
+    LLM_MODELS,
+    EMBEDDING_MODEL,
+    TEXT_SPLITTER_NAME,
+    FSCHAT_CONTROLLER,
+    FSCHAT_OPENAI_API,
+    FSCHAT_MODEL_WORKERS,
+    API_SERVER,
+    WEBUI_SERVER,
+    HTTPX_DEFAULT_TIMEOUT,
+    DEFAULT_BIND_HOST
+)
 import asyncio
 import multiprocessing as mp
 import os
@@ -21,48 +43,29 @@ except:
     pass
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from configs import (
-    LOG_PATH,
-    log_verbose,
-    logger,
-    LLM_MODELS,
-    EMBEDDING_MODEL,
-    TEXT_SPLITTER_NAME,
-    FSCHAT_CONTROLLER,
-    FSCHAT_OPENAI_API,
-    FSCHAT_MODEL_WORKERS,
-    API_SERVER,
-    WEBUI_SERVER,
-    HTTPX_DEFAULT_TIMEOUT,
-)
-from server.utils import (fschat_controller_address, fschat_model_worker_address,
-                          fschat_openai_api_address, set_httpx_config, get_httpx_client,
-                          get_model_worker_config, get_all_model_worker_configs,
-                          MakeFastAPIOffline, FastAPI, llm_device, embedding_device)
-import argparse
-from typing import Tuple, List, Dict
-from configs import VERSION
 
-def  advance_load_vs():
-        # 提前向知识库查询api发送一次请求，减少第一次聊天的等待时间
-        data = {
-            "query": "你好",
-            "knowledge_base_name": "gems",
-            "top_k": 8,
-            "score_threshold": 0.9,
-            "history": [],
-            "stream": False,
-            "model_name": "baichuan-13b-chat-int4",
-            "temperature": 0.2,
-            "max_tokens": 0,
-            "prompt_name": "default"
-            }
-        headers = {
-            "Content-Type": "application/json"
-        }
-        url = 'http://127.0.0.1:7861/chat/knowledge_base_chat'
-        response = requests.post(url, data=json.dumps(data), headers=headers)
-        return
+
+def advance_load_vs():
+    # 提前向知识库查询api发送一次请求，减少第一次聊天的等待时间
+    data = {
+        "query": "你好",
+        "knowledge_base_name": "gems",
+        "top_k": 8,
+        "score_threshold": 0.9,
+        "history": [],
+        "stream": False,
+        "model_name": "baichuan-13b-chat-int4",
+        "temperature": 0.2,
+        "max_tokens": 0,
+        "prompt_name": "default"
+    }
+    headers = {
+        "Content-Type": "application/json"
+    }
+    url = f'http://{DEFAULT_BIND_HOST}:7861/chat/knowledge_base_chat'
+    response = requests.post(url, data=json.dumps(data), headers=headers)
+    return
+
 
 def create_controller_app(
         dispatch_method: str,
@@ -72,7 +75,7 @@ def create_controller_app(
     fastchat.constants.LOGDIR = LOG_PATH
     from fastchat.serve.controller import app, Controller, logger
     logger.setLevel(log_level)
-
+    print('create_controller_app')
     controller = Controller(dispatch_method)
     sys.modules["fastchat.serve.controller"].controller = controller
 
@@ -104,37 +107,41 @@ def create_model_worker_app(log_level: str = "INFO", **kwargs) -> FastAPI:
     import fastchat.constants
     fastchat.constants.LOGDIR = LOG_PATH
     import argparse
-
+    print('create_model_worker_app')
     parser = argparse.ArgumentParser()
     args = parser.parse_args([])
 
     for k, v in kwargs.items():
         setattr(args, k, v)
-    if worker_class := kwargs.get("langchain_model"): #Langchian支持的模型不用做操作
-        from fastchat.serve.base_model_worker import app
+    # Langchian支持的模型不用做操作
+    if worker_class := kwargs.get("langchain_model"):
+        print('langchain_model')
+        from fastchat.serve.base_model_worker import app  # app是Fastapi类型的
         worker = ""
-    # 在线模型API
-    elif worker_class := kwargs.get("worker_class"):
+    # langchain不支持的模型
+    elif worker_class := kwargs.get("worker_class"): 
+        print('worker_class')
         from fastchat.serve.base_model_worker import app
-
         worker = worker_class(model_names=args.model_names,
                               controller_addr=args.controller_address,
                               worker_addr=args.worker_address)
         # sys.modules["fastchat.serve.base_model_worker"].worker = worker
-        sys.modules["fastchat.serve.base_model_worker"].logger.setLevel(log_level)
-    # 本地模型
+        sys.modules["fastchat.serve.base_model_worker"].logger.setLevel(
+            log_level)
+    # 需要用vllm部署的模型[vedue]
     else:
+        print('vllm')
         from configs.model_config import VLLM_MODEL_DICT
         if kwargs["model_names"][0] in VLLM_MODEL_DICT and args.infer_turbo == "vllm":
             import fastchat.serve.vllm_worker
             from fastchat.serve.vllm_worker import VLLMWorker, app, worker_id
             from vllm import AsyncLLMEngine
-            from vllm.engine.arg_utils import AsyncEngineArgs,EngineArgs
+            from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
 
-            args.tokenizer = args.model_path # 如果tokenizer与model_path不一致在此处添加
+            args.tokenizer = args.model_path  # 如果tokenizer与model_path不一致在此处添加
             args.tokenizer_mode = 'auto'
-            args.trust_remote_code= True
-            args.download_dir= None
+            args.trust_remote_code = True
+            args.download_dir = None
             args.load_format = 'auto'
             args.dtype = 'auto'
             args.seed = 0
@@ -144,13 +151,14 @@ def create_model_worker_app(log_level: str = "INFO", **kwargs) -> FastAPI:
             args.block_size = 16
             args.swap_space = 4  # GiB
             args.gpu_memory_utilization = 0.90
-            args.max_num_batched_tokens = None # 一个批次中的最大令牌（tokens）数量，这个取决于你的显卡和大模型设置，设置太大显存会不够
+            # 一个批次中的最大令牌（tokens）数量，这个取决于你的显卡和大模型设置，设置太大显存会不够
+            args.max_num_batched_tokens = None
             args.max_num_seqs = 256
             args.disable_log_stats = False
             args.conv_template = None
             args.limit_worker_concurrency = 5
             args.no_register = False
-            args.num_gpus = 4 # vllm worker的切分是tensor并行，这里填写显卡的数量
+            args.num_gpus = 4  # vllm worker的切分是tensor并行，这里填写显卡的数量
             args.engine_use_ray = False
             args.disable_log_requests = False
 
@@ -160,10 +168,10 @@ def create_model_worker_app(log_level: str = "INFO", **kwargs) -> FastAPI:
             args.quantization = None
             args.max_log_len = None
             args.tokenizer_revision = None
-            
+
             # 0.2.2 vllm需要新加的参数
             args.max_paddings = 256
-            
+
             if args.model_path:
                 args.model = args.model_path
             if args.num_gpus > 1:
@@ -174,26 +182,26 @@ def create_model_worker_app(log_level: str = "INFO", **kwargs) -> FastAPI:
 
             engine_args = AsyncEngineArgs.from_cli_args(args)
             engine = AsyncLLMEngine.from_engine_args(engine_args)
-
             worker = VLLMWorker(
-                        controller_addr = args.controller_address,
-                        worker_addr = args.worker_address,
-                        worker_id = worker_id,
-                        model_path = args.model_path,
-                        model_names = args.model_names,
-                        limit_worker_concurrency = args.limit_worker_concurrency,
-                        no_register = args.no_register,
-                        llm_engine =  engine,
-                        conv_template = args.conv_template,
-                        )
+                controller_addr=args.controller_address,
+                worker_addr=args.worker_address,
+                worker_id=worker_id,
+                model_path=args.model_path,
+                model_names=args.model_names,
+                limit_worker_concurrency=args.limit_worker_concurrency,
+                no_register=args.no_register,
+                llm_engine=engine,
+                conv_template=args.conv_template,
+            )
             sys.modules["fastchat.serve.vllm_worker"].engine = engine
             sys.modules["fastchat.serve.vllm_worker"].worker = worker
-            sys.modules["fastchat.serve.vllm_worker"].logger.setLevel(log_level)
-
+            sys.modules["fastchat.serve.vllm_worker"].logger.setLevel(
+                log_level)
+        # vedue
         else:
             from fastchat.serve.model_worker import app, GptqConfig, AWQConfig, ModelWorker, worker_id
 
-            args.gpus = "0" # GPU的编号,如果有多个GPU，可以设置为"0,1,2,3"
+            args.gpus = "0"  # GPU的编号,如果有多个GPU，可以设置为"0,1,2,3"
             args.max_gpu_memory = "24GiB"
             args.num_gpus = 1  # model worker的切分是model并行，这里填写显卡的数量
             args.load_8bit = False
@@ -232,7 +240,7 @@ def create_model_worker_app(log_level: str = "INFO", **kwargs) -> FastAPI:
                 wbits=args.awq_wbits,
                 groupsize=args.awq_groupsize,
             )
-
+            # vedue - 初始化ModelWorker对象，加载模型也是在这一步
             worker = ModelWorker(
                 controller_addr=args.controller_address,
                 worker_addr=args.worker_address,
@@ -255,7 +263,8 @@ def create_model_worker_app(log_level: str = "INFO", **kwargs) -> FastAPI:
             sys.modules["fastchat.serve.model_worker"].args = args
             sys.modules["fastchat.serve.model_worker"].gptq_config = gptq_config
             # sys.modules["fastchat.serve.model_worker"].worker = worker
-            sys.modules["fastchat.serve.model_worker"].logger.setLevel(log_level)
+            sys.modules["fastchat.serve.model_worker"].logger.setLevel(
+                log_level)
 
     MakeFastAPIOffline(app)
     app.title = f"FastChat LLM Server ({args.model_names[0]})"
@@ -272,9 +281,11 @@ def create_openai_api_app(
     fastchat.constants.LOGDIR = LOG_PATH
     from fastchat.serve.openai_api_server import app, CORSMiddleware, app_settings
     from fastchat.utils import build_logger
+    print('create_openai_api_app')
     logger = build_logger("openai_api", "openai_api.log")
     logger.setLevel(log_level)
 
+    # 添加中间件以允许跨域资源共享
     app.add_middleware(
         CORSMiddleware,
         allow_credentials=True,
@@ -293,11 +304,17 @@ def create_openai_api_app(
 
 
 def _set_app_event(app: FastAPI, started_event: mp.Event = None):
+    """  
+    作用是让app中的每个事件在执行完成后自动转变为“已执行”状态
+    
+    使用装饰器 @app.on_event("startup") 注册 on_startip() 为 FastAPI 应用的启动事件处理器。这意味着当 FastAPI 应用启动时，会自动执行 on_startup 函数。
+    
+    started_event.set()执行完成后，started_event的状态变为“已执行”
+    """
     @app.on_event("startup")
     async def on_startup():
         if started_event is not None:
             started_event.set()
-
 
 def run_controller(log_level: str = "INFO", started_event: mp.Event = None):
     import uvicorn
@@ -317,7 +334,8 @@ def run_controller(log_level: str = "INFO", started_event: mp.Event = None):
     # add interface to release and load model worker
     @app.post("/release_worker")
     def release_worker(
-            model_name: str = Body(..., description="要释放模型的名称", samples=["chatglm-6b"]),
+            model_name: str = Body(..., description="要释放模型的名称", samples=[
+                                   "chatglm-6b"]),
             # worker_address: str = Body(None, description="要释放模型的地址，与名称二选一", samples=[FSCHAT_CONTROLLER_address()]),
             new_model_name: str = Body(None, description="释放后加载该模型"),
             keep_origin: bool = Body(False, description="不释放原模型，加载新模型")
@@ -346,7 +364,7 @@ def run_controller(log_level: str = "INFO", started_event: mp.Event = None):
 
         with get_httpx_client() as client:
             r = client.post(worker_address + "/release",
-            json={"new_model_name": new_model_name, "keep_origin": keep_origin})
+                            json={"new_model_name": new_model_name, "keep_origin": keep_origin})
             if r.status_code != 200:
                 msg = f"failed to release model: {model_name}"
                 logger.error(msg)
@@ -380,16 +398,18 @@ def run_controller(log_level: str = "INFO", started_event: mp.Event = None):
         sys.stdout = sys.__stdout__
         sys.stderr = sys.__stderr__
 
+    # uvicorn是一个支持异步的服务器，可以用于搭建web应用
     uvicorn.run(app, host=host, port=port, log_level=log_level.lower())
 
 # 加载模型
 def run_model_worker(
         model_name: str = LLM_MODELS[0],
-        controller_address: str = "",
+        controller_address: str = "",  # 地址和端口
         log_level: str = "INFO",
         q: mp.Queue = None,
         started_event: mp.Event = None,
 ):
+
     import uvicorn
     from fastapi import Body
     import sys
@@ -437,7 +457,8 @@ def run_openai_api(log_level: str = "INFO", started_event: mp.Event = None):
     set_httpx_config()
 
     controller_addr = fschat_controller_address()
-    app = create_openai_api_app(controller_addr, log_level=log_level)  # TODO: not support keys yet.
+    # TODO: not support keys yet.
+    app = create_openai_api_app(controller_addr, log_level=log_level)
     _set_app_event(app, started_event)
 
     host = FSCHAT_OPENAI_API["host"]
@@ -471,13 +492,13 @@ def run_webui(started_event: mp.Event = None, run_mode: str = None):
     port = WEBUI_SERVER["port"]
 
     cmd = ["streamlit", "run", "webui.py",
-            "--server.address", host,
-            "--server.port", str(port),
-            "--theme.base", "light",
-            "--theme.primaryColor", "#165dff",
-            "--theme.secondaryBackgroundColor", "#f5f5f5",
-            "--theme.textColor", "#000000",
-        ]
+           "--server.address", host,
+           "--server.port", str(port),
+           "--theme.base", "light",
+           "--theme.primaryColor", "#165dff",
+           "--theme.secondaryBackgroundColor", "#f5f5f5",
+           "--theme.textColor", "#000000",
+           ]
     if run_mode == "lite":
         cmd += [
             "--",
@@ -590,7 +611,8 @@ def dump_server_info(after_start=False, args=None):
     print(f"操作系统：{platform.platform()}.")
     print(f"python版本：{sys.version}")
     print(f"项目版本：{VERSION}")
-    print(f"langchain版本：{langchain.__version__}. fastchat版本：{fastchat.__version__}")
+    print(
+        f"langchain版本：{langchain.__version__}. fastchat版本：{fastchat.__version__}")
     print("\n")
 
     models = LLM_MODELS
@@ -616,6 +638,7 @@ def dump_server_info(after_start=False, args=None):
     print("=" * 30 + "Langchain-Chatchat Configuration" + "=" * 30)
     print("\n")
 
+
 async def start_main_server():
     import time
     import signal
@@ -633,7 +656,7 @@ async def start_main_server():
     signal.signal(signal.SIGINT, handler("SIGINT"))
     signal.signal(signal.SIGTERM, handler("SIGTERM"))
 
-    mp.set_start_method("spawn")
+    mp.set_start_method("spawn") # 这是在POSIX兼容系统（如Linux、macOS）和Windows上默认使用的一种方法。当使用"spawn"模式时，每当创建一个新进程时，操作系统都会执行父进程的一个全新副本，然后从该复制进程中开始执行指定的子进程入口点函数。
     manager = mp.Manager()
     run_mode = None
 
@@ -666,7 +689,7 @@ async def start_main_server():
         run_mode = "lite"
 
     dump_server_info(args=args)
-    
+
     if len(sys.argv) > 1:
         logger.info(f"正在启动服务：")
         logger.info(f"如需查看 llm_api 日志，请前往 {LOG_PATH}")
@@ -681,7 +704,7 @@ async def start_main_server():
     else:
         log_level = "INFO"
 
-    controller_started = manager.Event()
+    controller_started = manager.Event() # 创建一个事件对象
     if args.openai_api:
         process = Process(
             target=run_controller,
@@ -722,7 +745,7 @@ async def start_main_server():
             config = get_model_worker_config(model_name)
             if (config.get("online_api")
                 and config.get("worker_class")
-                and model_name in FSCHAT_MODEL_WORKERS):
+                    and model_name in FSCHAT_MODEL_WORKERS):
                 e = manager.Event()
                 model_worker_started.append(e)
                 process = Process(
@@ -762,12 +785,12 @@ async def start_main_server():
     else:
         try:
             # 保证任务收到SIGINT后，能够正常退出
-            if p:= processes.get("controller"):
+            if p := processes.get("controller"):
                 p.start()
                 p.name = f"{p.name} ({p.pid})"
-                controller_started.wait() # 等待controller启动完成
+                controller_started.wait()  # 等待controller启动完成
 
-            if p:= processes.get("openai_api"):
+            if p := processes.get("openai_api"):
                 p.start()
                 p.name = f"{p.name} ({p.pid})"
 
@@ -783,31 +806,31 @@ async def start_main_server():
             for e in model_worker_started:
                 e.wait()
 
-            if p:= processes.get("api"):
+            if p := processes.get("api"):
                 p.start()
                 p.name = f"{p.name} ({p.pid})"
-                api_started.wait() # 等待api.py启动完成
-            
-            if p:= processes.get("webui"):
+                api_started.wait()  # 等待api.py启动完成
+
+            if p := processes.get("webui"):
                 p.start()
                 p.name = f"{p.name} ({p.pid})"
-                webui_started.wait() # 等待webui.py启动完成
+                webui_started.wait()  # 等待webui.py启动完成
 
             dump_server_info(after_start=True, args=args)
-                        
+
             # 提前发送一个请求来激活向量库
             class MyThread(threading.Thread):
                 def run(self):
                     advance_load_vs()
             my_thread = MyThread()
             my_thread.start()
-            
+
             while True:
-                cmd = queue.get() # 收到切换模型的消息
+                cmd = queue.get()  # 收到切换模型的消息
                 e = manager.Event()
                 if isinstance(cmd, list):
                     model_name, cmd, new_model_name = cmd
-                    if cmd == "start": # 运行新模型
+                    if cmd == "start":  # 运行新模型
                         logger.info(f"准备启动新模型进程：{new_model_name}")
                         process = Process(
                             target=run_model_worker,
@@ -854,10 +877,10 @@ async def start_main_server():
                             processes["model_worker"][new_model_name] = process
                             e.wait()
                             timing = datetime.now() - start_time
-                            logger.info(f"成功启动新模型进程：{new_model_name}。用时：{timing}。")
+                            logger.info(
+                                f"成功启动新模型进程：{new_model_name}。用时：{timing}。")
                         else:
                             logger.error(f"未找到模型进程：{model_name}")
-
 
             # for process in processes.get("model_worker", {}).values():
             #     process.join()
@@ -906,7 +929,7 @@ if __name__ == "__main__":
         asyncio.set_event_loop(loop)
     # 同步调用协程代码
     loop.run_until_complete(start_main_server())
-    
+
     # 在应用程序结束时关闭所有mysql连接
     pool.close_all()
 

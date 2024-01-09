@@ -7,7 +7,7 @@ import os
 import re
 import time
 from configs import (TEMPERATURE, HISTORY_LEN, PROMPT_TEMPLATES,
-                     DEFAULT_KNOWLEDGE_BASE, DEFAULT_SEARCH_ENGINE, SUPPORT_AGENT_MODEL)
+                     DEFAULT_KNOWLEDGE_BASE, DEFAULT_SEARCH_ENGINE, SUPPORT_AGENT_MODEL, RUNSE_TAMPLATE)
 from server.knowledge_base.utils import LOADER_DICT
 import uuid
 from typing import List, Dict
@@ -422,10 +422,9 @@ def dialogue_page(api: ApiRequest, is_lite: bool = False):
                     chat_box.update_msg("\n\n".join(d.get("docs", [])), element_index=1, streaming=False)
                     text0 = text
                     chat_box.update_msg("正在润色语言 ...", element_index=0)
+                    time.sleep(1)
                     text = ""
-                    prompt2 = f"```{text0}```\n\n请你用亲切诙谐的语气有条理地转述这段话，直接输出转述后的结果。"
-                    # prompt2 = f"```{text0}```\n\n请你用亲切诙谐的语气转述这段话"
-                    # prompt2 = f"```{text0}```\n\n请你用亲切诙谐的语气转述这段话"
+                    prompt2 = RUNSE_TAMPLATE % text0
                     message_id = ""
                     r = api.chat_chat(prompt2,
                                     history=[],

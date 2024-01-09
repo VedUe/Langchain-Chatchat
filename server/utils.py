@@ -30,7 +30,7 @@ async def wrap_done(fn: Awaitable, event: asyncio.Event):
         # Signal the aiter to stop.
         event.set()
 
-
+# vedue: 获取模型
 def get_ChatOpenAI(
         model_name: str,
         temperature: float,
@@ -41,6 +41,7 @@ def get_ChatOpenAI(
         **kwargs: Any,
 ) -> ChatOpenAI:
     config = get_model_worker_config(model_name)
+    print("config - " + str(config))
     if model_name == "openai-api":
         model_name = config.get("model_name")
     model = ChatOpenAI(
@@ -48,7 +49,8 @@ def get_ChatOpenAI(
         verbose=verbose,
         callbacks=callbacks,
         openai_api_key=config.get("api_key", "EMPTY"),
-        openai_api_base=config.get("api_base_url", fschat_openai_api_address()),
+        openai_api_base=config.get(
+            "api_base_url", fschat_openai_api_address()),  # 本地模型使用fastchat的api
         model_name=model_name,
         temperature=temperature,
         max_tokens=max_tokens,
@@ -56,6 +58,7 @@ def get_ChatOpenAI(
         **kwargs
     )
     return model
+
 
 def get_OpenAI(
         model_name: str,
@@ -75,7 +78,8 @@ def get_OpenAI(
         verbose=verbose,
         callbacks=callbacks,
         openai_api_key=config.get("api_key", "EMPTY"),
-        openai_api_base=config.get("api_base_url", fschat_openai_api_address()),
+        openai_api_base=config.get(
+            "api_base_url", fschat_openai_api_address()),
         model_name=model_name,
         temperature=temperature,
         max_tokens=max_tokens,
@@ -315,7 +319,8 @@ def get_model_path(model_name: str, type: str = None) -> Optional[str]:
         for v in MODEL_PATH.values():
             paths.update(v)
 
-    if path_str := paths.get(model_name):  # 以 "chatglm-6b": "THUDM/chatglm-6b-new" 为例，以下都是支持的路径
+    # 以 "chatglm-6b": "THUDM/chatglm-6b-new" 为例，以下都是支持的路径
+    if path_str := paths.get(model_name):
         path = Path(path_str)
         if path.is_dir():  # 任意绝对路径
             return str(path)
@@ -326,10 +331,12 @@ def get_model_path(model_name: str, type: str = None) -> Optional[str]:
             if path.is_dir():  # use key, {MODEL_ROOT_PATH}/chatglm-6b
                 return str(path)
             path = root_path / path_str
-            if path.is_dir():  # use value, {MODEL_ROOT_PATH}/THUDM/chatglm-6b-new
+            # use value, {MODEL_ROOT_PATH}/THUDM/chatglm-6b-new
+            if path.is_dir():
                 return str(path)
             path = root_path / path_str.split("/")[-1]
-            if path.is_dir():  # use value split by "/", {MODEL_ROOT_PATH}/chatglm-6b-new
+            # use value split by "/", {MODEL_ROOT_PATH}/chatglm-6b-new
+            if path.is_dir():
                 return str(path)
         return path_str  # THUDM/chatglm06b
 
@@ -349,11 +356,13 @@ def get_model_worker_config(model_name: str = None) -> dict:
     config.update(ONLINE_LLM_MODEL.get(model_name, {}).copy())
     config.update(FSCHAT_MODEL_WORKERS.get(model_name, {}).copy())
 
+    # 在线模型
     if model_name in ONLINE_LLM_MODEL:
         config["online_api"] = True
         if provider := config.get("provider"):
             try:
-                config["worker_class"] = getattr(model_workers, provider)
+                config["worker_class"] = getattr(
+                    model_workers, provider)  # work_class是在线模型的类型
             except Exception as e:
                 msg = f"在线模型 ‘{model_name}’ 的provider没有正确配置"
                 logger.error(f'{e.__class__.__name__}: {msg}',
@@ -433,7 +442,8 @@ def get_prompt_template(type: str, name: str) -> Optional[str]:
 
     from configs import prompt_config
     import importlib
-    importlib.reload(prompt_config)  # TODO: 检查configs/prompt_config.py文件有修改再重新加载
+    # TODO: 检查configs/prompt_config.py文件有修改再重新加载
+    importlib.reload(prompt_config)
     return prompt_config.PROMPT_TEMPLATES[type].get(name)
 
 
@@ -470,7 +480,8 @@ def set_httpx_config(
         os.environ[k] = v
 
     # set host to bypass proxy
-    no_proxy = [x.strip() for x in os.environ.get("no_proxy", "").split(",") if x.strip()]
+    no_proxy = [x.strip() for x in os.environ.get(
+        "no_proxy", "").split(",") if x.strip()]
     no_proxy += [
         # do not use proxy for locahost
         "http://127.0.0.1",
@@ -581,7 +592,8 @@ def get_httpx_client(
     for host in os.environ.get("no_proxy", "").split(","):
         if host := host.strip():
             # default_proxies.update({host: None}) # Origin code
-            default_proxies.update({'all://' + host: None})  # PR 1838 fix, if not add 'all://', httpx will raise error
+            # PR 1838 fix, if not add 'all://', httpx will raise error
+            default_proxies.update({'all://' + host: None})
 
     # merge default proxies with user provided proxies
     if isinstance(proxies, str):
@@ -646,7 +658,7 @@ def list_online_embed_models() -> List[str]:
                 ret.append(k)
     return ret
 
-
+# vedue
 def load_local_embeddings(model: str = None, device: str = embedding_device()):
     '''
     从缓存中加载embeddings，可以避免多线程时竞争加载。

@@ -16,7 +16,7 @@ class GemTextSplitter(CharacterTextSplitter):
             text = re.match(r"\n{3,}", "\n", text)
             text = re.match('\s', ' ', text)
             text = text.replace("\n\n", "")
-        sent_sep_pattern = re.compile(r'\n')
+        sent_sep_pattern = re.compile(r'【split】')
         sent_list0 = []
         for ele in sent_sep_pattern.split(text):
             if sent_sep_pattern.match(ele) and sent_list0:
@@ -26,7 +26,7 @@ class GemTextSplitter(CharacterTextSplitter):
         return sent_list0
     
 if __name__ == "__main__":
-    with open('/code/Langchain-Chatchat/knowledge_base/gems/content/heads.txt', 'r', encoding='utf-8') as fr:
+    with open('/code/Langchain-Chatchat/knowledge_base/gems/content/heads.md', 'r', encoding='utf-8') as fr:
         text = fr.read()
     text_splitter = GemTextSplitter()
     sent_list = text_splitter.split_text(text)

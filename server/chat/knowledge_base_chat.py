@@ -50,7 +50,7 @@ async def knowledge_base_chat(query: str = Body(..., description="用户输入",
                               ),
                               request: Request = None
                               ):
-    kb = KBServiceFactory.get_service_by_name('gems')
+    kb = KBServiceFactory.get_service_by_name(knowledge_base_name)
     if kb is None:
         return BaseResponse(code=404, msg=f"未找到知识库 {knowledge_base_name}")
 
@@ -68,7 +68,7 @@ async def knowledge_base_chat(query: str = Body(..., description="用户输入",
         if isinstance(max_tokens, int) and max_tokens <= 0:
             max_tokens = None
 
-        # 获取模型
+        # 获取在线模型API / fastchat openai API
         model = get_ChatOpenAI(
             model_name=model_name,
             temperature=temperature,
@@ -110,11 +110,13 @@ async def knowledge_base_chat(query: str = Body(..., description="用户输入",
         chain = LLMChain(prompt=chat_prompt, llm=model)
 
         # Begin a task that runs in the background.
+        # wrap_done函数的作用是将一个异步调用的结果传递给一个回调函数
         task = asyncio.create_task(wrap_done(
             chain.acall({"context": context, "question": query}),
             callback.done),
         )
 
+        # 文档数据来源
         source_documents = []
         for inum, doc in enumerate(docs):
             # filename = doc.metadata.get("source")
